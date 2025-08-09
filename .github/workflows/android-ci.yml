@@ -30,18 +30,16 @@ jobs:
           cache: gradle
 
       - name: Grant execute permission for gradlew
-        # تغییر مسیر کاری به پوشه اصلی پروژه (مثلاً 'app')
-        # تا gradlew پیدا شود.
-        run: chmod +x ./gradlew
-        working-directory: app
+        # با توجه به ساختار پوشه، gradlew در ریشه پروژه است.
+        run: chmod +x gradlew
 
       - name: Build with Gradle
-        # تغییر مسیر کاری به پوشه اصلی پروژه.
+        # دستورات گریدل از ریشه پروژه اجرا می‌شوند.
         run: ./gradlew assembleRelease
-        working-directory: app
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: pxplayer-release
+          # مسیر فایل APK را به درستی مشخص می‌کند.
           path: app/build/outputs/apk/release/app-release-unsigned.apk
