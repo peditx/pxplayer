@@ -28,9 +28,13 @@ jobs:
           distribution: 'temurin'
           # استفاده از کش برای افزایش سرعت بیلد.
           cache: gradle
+      
+      - name: List files for debugging
+        # این دستور تمام فایل‌های موجود در پوشه اصلی را لیست می‌کند.
+        run: ls -la
 
       - name: Grant execute permission for gradlew
-        # با توجه به ساختار پوشه، gradlew در ریشه پروژه است.
+        # این مرحله احتمالاً خطا می‌دهد، چون gradlew پیدا نمی‌شود.
         run: chmod +x gradlew
 
       - name: Build with Gradle
