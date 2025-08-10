@@ -44,15 +44,6 @@ class BluetoothSinkService : MediaSessionService() {
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState = _playerState.asStateFlow()
 
-    private val _pairedDevicesList = MutableStateFlow<List<BluetoothDevice>>(emptyList())
-    val pairedDevicesList = _pairedDevicesList.asStateFlow()
-    
-    private val _discoveredDevicesList = MutableStateFlow<List<BluetoothDevice>>(emptyList())
-    val discoveredDevicesList = _discoveredDevicesList.asStateFlow()
-    private val _isScanning = MutableStateFlow(false)
-    val isScanning = _isScanning.asStateFlow()
-
-
     inner class LocalBinder : Binder() {
         fun getService(): BluetoothSinkService = this@BluetoothSinkService
     }
@@ -70,8 +61,6 @@ class BluetoothSinkService : MediaSessionService() {
         startForeground(Constants.NOTIFICATION_ID, createNotification("Ready to connect"))
 
         setBluetoothClassAsCarStereo()
-        makeDiscoverable()
-
         initializeMediaSession()
         connectToBluetoothProfiles()
         registerBroadcastReceivers()
@@ -89,56 +78,22 @@ class BluetoothSinkService : MediaSessionService() {
             Log.e("PxPlayerService", "Error setting Bluetooth class", e)
         }
     }
-    
-    private fun makeDiscoverable() {
+
+    // --- NEW CRITICAL METHOD: Set A2DP Sink profile to the highest priority ---
+    private fun setProfilePriority(profile: BluetoothProfile) {
         try {
-            val setScanModeMethod = bluetoothAdapter::class.java.getMethod("setScanMode", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
-            setScanModeMethod.invoke(bluetoothAdapter, 23, 300) // 23 = SCAN_MODE_CONNECTABLE_DISCOVERABLE
-        } catch (e: Exception) {
-            Log.e("PxPlayerService", "Error setting discoverable mode", e)
-        }
-    }
-
-    fun startDiscovery() {
-        if (bluetoothAdapter.isDiscovering) {
-            bluetoothAdapter.cancelDiscovery()
-        }
-        _discoveredDevicesList.value = emptyList()
-        bluetoothAdapter.startDiscovery()
-        _isScanning.value = true
-    }
-
-    fun cancelDiscovery() {
-        if (bluetoothAdapter.isDiscovering) {
-            bluetoothAdapter.cancelDiscovery()
-        }
-        _isScanning.value = false
-    }
-
-    fun createBond(device: BluetoothDevice) {
-        try {
-            device.createBond()
-        } catch (e: Exception) {
-            Log.e("PxPlayerService", "Error creating bond", e)
-        }
-    }
-
-    fun fetchPairedDevices() {
-        _pairedDevicesList.value = bluetoothAdapter.bondedDevices.toList()
-    }
-
-    fun connect(device: BluetoothDevice) {
-        Log.d("PxPlayerService", "Attempting to connect to ${device.name}")
-        _playerState.update { it.copy(connectionStatus = ConnectionStatus.CONNECTING) }
-        try {
-            val connectMethod = a2dpSinkProfile!!::class.java.getMethod("connect", BluetoothDevice::class.java)
-            val result = connectMethod.invoke(a2dpSinkProfile, device) as Boolean
-            if (!result) {
-                _playerState.update { it.copy(connectionStatus = ConnectionStatus.DISCONNECTED) }
+            // PRIORITY_ON = 100
+            val priorityOn = 100
+            // Use reflection to get the hidden setPriority method
+            val setPriorityMethod = profile::class.java.getMethod("setPriority", BluetoothDevice::class.java, Int::class.javaPrimitiveType)
+            
+            // Set high priority for all already paired devices
+            for (device in bluetoothAdapter.bondedDevices) {
+                setPriorityMethod.invoke(profile, device, priorityOn)
+                Log.d("PxPlayerService", "Set A2DP Sink priority for ${device.name}")
             }
         } catch (e: Exception) {
-            Log.e("PxPlayerService", "Error connecting via reflection", e)
-            _playerState.update { it.copy(connectionStatus = ConnectionStatus.DISCONNECTED) }
+            Log.e("PxPlayerService", "Error setting profile priority via reflection", e)
         }
     }
 
@@ -174,6 +129,10 @@ class BluetoothSinkService : MediaSessionService() {
             when (profile) {
                 Constants.A2DP_SINK_PROFILE -> {
                     a2dpSinkProfile = proxy
+                    Log.d("PxPlayerService", "A2DP Sink Profile connected.")
+                    // --- CRITICAL STEP: Set the priority once the profile is available ---
+                    setProfilePriority(proxy)
+                    
                     if (proxy.connectedDevices.isNotEmpty()) {
                         val device = proxy.connectedDevices.first()
                         _playerState.update {
@@ -198,46 +157,29 @@ class BluetoothSinkService : MediaSessionService() {
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action
-            when (action) {
-                "android.bluetooth.a2dpsink.profile.action.CONNECTION_STATE_CHANGED" -> {
-                    val state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_DISCONNECTED)
-                    val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
-                    when (state) {
-                        BluetoothProfile.STATE_CONNECTING -> _playerState.update { it.copy(connectionStatus = ConnectionStatus.CONNECTING) }
-                        BluetoothProfile.STATE_CONNECTED -> _playerState.update {
+            if (action == "android.bluetooth.a2dpsink.profile.action.CONNECTION_STATE_CHANGED") {
+                val state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_DISCONNECTED)
+                val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                when (state) {
+                    BluetoothProfile.STATE_CONNECTING -> _playerState.update { it.copy(connectionStatus = ConnectionStatus.CONNECTING) }
+                    BluetoothProfile.STATE_CONNECTED -> {
+                        _playerState.update {
                             it.copy(
                                 connectionStatus = ConnectionStatus.CONNECTED,
                                 trackInfo = it.trackInfo.copy(artist = device?.name ?: "Connected Device")
                             )
                         }
-                        BluetoothProfile.STATE_DISCONNECTED -> _playerState.update {
-                            it.copy(connectionStatus = ConnectionStatus.DISCONNECTED, isPlaying = false, trackInfo = TrackInfo())
-                        }
                     }
-                }
-                BluetoothDevice.ACTION_FOUND -> {
-                    val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                    device?.let {
-                        if (!_discoveredDevicesList.value.contains(it) && it.name != null) {
-                            _discoveredDevicesList.value += it
-                        }
+                    BluetoothProfile.STATE_DISCONNECTED -> _playerState.update {
+                        it.copy(connectionStatus = ConnectionStatus.DISCONNECTED, isPlaying = false, trackInfo = TrackInfo())
                     }
-                }
-                BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> _isScanning.value = false
-                BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
-                    fetchPairedDevices() // Refresh paired list after pairing
                 }
             }
         }
     }
     
     private fun registerBroadcastReceivers() {
-        val intentFilter = IntentFilter().apply {
-            addAction("android.bluetooth.a2dpsink.profile.action.CONNECTION_STATE_CHANGED")
-            addAction(BluetoothDevice.ACTION_FOUND)
-            addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
-            addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
-        }
+        val intentFilter = IntentFilter("android.bluetooth.a2dpsink.profile.action.CONNECTION_STATE_CHANGED")
         registerReceiver(broadcastReceiver, intentFilter)
     }
 
