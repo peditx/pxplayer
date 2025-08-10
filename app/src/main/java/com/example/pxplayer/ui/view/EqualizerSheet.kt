@@ -51,7 +51,8 @@ fun EqualizerSheet(
                         )
                         Slider(
                             value = bandLevel.level.toFloat(),
-                            onValueChange = { onBandLevelChange(bandLevel.band, it.toShort()) },
+                            // --- FIX APPLIED HERE ---
+                            onValueChange = { onBandLevelChange(bandLevel.band, it.toInt().toShort()) },
                             valueRange = bandLevel.minLevel.toFloat()..bandLevel.maxLevel.toFloat(),
                             modifier = Modifier
                                 .height(150.dp)
