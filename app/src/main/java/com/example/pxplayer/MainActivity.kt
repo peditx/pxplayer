@@ -24,15 +24,11 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
             if (permissions.values.all { it }) {
                 startSinkService()
-            } else {
-                // Handle permission denial gracefully in a real app
             }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // --- FIX: Set fullscreen immersive mode ---
         setFullscreen()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -48,6 +44,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // --- FIX: Re-apply fullscreen whenever the app is resumed ---
+    override fun onResume() {
+        super.onResume()
+        setFullscreen()
+    }
+
     private fun startSinkService() {
         viewModel.onPermissionsGranted()
         Intent(this, BluetoothSinkService::class.java).also { intent ->
@@ -60,13 +62,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setFullscreen() {
-        // This tells the app to draw behind the system bars
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        // This controller allows us to hide the system bars
         val controller = WindowInsetsControllerCompat(window, window.decorView)
-        // Hide the status bar and navigation bar
         controller.hide(WindowInsetsCompat.Type.systemBars())
-        // Allow the user to swipe to show the system bars for a moment
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     }
 }
