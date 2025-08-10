@@ -9,7 +9,6 @@ android {
 
     defaultConfig {
         applicationId = "com.example.pxplayer"
-        // Lowered to support Android 9 (Pie) and above
         minSdk = 28
         targetSdk = 34
         versionCode = 1
@@ -64,10 +63,12 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
 
+    // --- FIX APPLIED HERE: Explicitly add the material icons dependency ---
+    implementation("androidx.compose.material:material-icons-extended-android:1.6.7")
+
     // Media3 for MediaSession
     implementation("androidx.media3:media3-session:1.3.1")
     implementation("androidx.media3:media3-exoplayer:1.3.1")
-
 
     // Coil for image loading
     implementation("io.coil-kt:coil-compose:2.6.0")
