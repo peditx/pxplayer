@@ -74,18 +74,10 @@ class BluetoothSinkService : MediaSessionService() {
     
     private fun setBluetoothClassAsCarStereo() {
         try {
-            // --- FIX APPLIED HERE: Use reflection to access the private constructor ---
-            // 1. Get the hidden constructor BluetoothClass(int)
             val constructor = BluetoothClass::class.java.getDeclaredConstructor(Int::class.javaPrimitiveType)
-            // 2. Make it accessible
             constructor.isAccessible = true
-            // 3. Create an instance with our desired class value (Car Stereo)
             val carAudioClass = constructor.newInstance(0x200404)
-
-            // 4. Get the hidden method setBluetoothClass(BluetoothClass)
             val setClassMethod = bluetoothAdapter::class.java.getMethod("setBluetoothClass", BluetoothClass::class.java)
-            
-            // 5. Invoke the method with the created object
             val result = setClassMethod.invoke(bluetoothAdapter, carAudioClass) as Boolean
             if (result) {
                 Log.d("PxPlayerService", "Bluetooth class successfully set to Car Stereo.")
@@ -134,6 +126,17 @@ class BluetoothSinkService : MediaSessionService() {
                 Constants.A2DP_SINK_PROFILE -> {
                     a2dpSinkProfile = proxy
                     Log.d("PxPlayerService", "A2DP Sink Profile connected.")
+                    // --- FIX: Proactively check for already connected devices ---
+                    if (proxy.connectedDevices.isNotEmpty()) {
+                        val device = proxy.connectedDevices.first()
+                        Log.d("PxPlayerService", "Found already connected device: ${device.name}")
+                        _playerState.update {
+                            it.copy(
+                                connectionStatus = ConnectionStatus.CONNECTED,
+                                trackInfo = it.trackInfo.copy(artist = device.name ?: "Connected Device")
+                            )
+                        }
+                    }
                 }
                 Constants.AVRCP_CONTROLLER_PROFILE -> {
                     avrcpControllerProfile = proxy
@@ -269,7 +272,6 @@ class BluetoothSinkService : MediaSessionService() {
     private fun createNotification(text: String): Notification {
         return NotificationCompat.Builder(this, Constants.NOTIFICATION_CHANNEL_ID)
             .setContentTitle("pxplayer Active")
-            .setContentText(text)
             .setSmallIcon(R.drawable.ic_album_placeholder)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
