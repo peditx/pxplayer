@@ -10,13 +10,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        # --- نکته مهم ۱ ---
-        # اگر پروژه اندروید شما در یک زیرپوشه قرار دارد، نام آن را اینجا وارد کنید.
-        # اگر در ریشه اصلی است، همین './' را باقی بگذارید.
-        working-directory: ./ # مثال: ./pxplayer
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -31,13 +24,13 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build with Gradle
-        run: ./gradlew assembleRelease
+      - name: Build Debug APK
+        # --- FIX APPLIED HERE: Changed from assembleRelease to assembleDebug ---
+        run: ./gradlew assembleDebug
 
-      - name: Upload APK artifact
+      - name: Upload Debug APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pxplayer-release-unsigned
-          # --- نکته مهم ۲ ---
-          # اگر در بالا working-directory را تغییر دادید، باید آن را به ابتدای این مسیر هم اضافه کنید.
-          path: app/build/outputs/apk/release/app-release-unsigned.apk # مثال: pxplayer/app/build/outputs/apk/release/app-release-unsigned.apk
+          name: pxplayer-debug
+          # --- FIX APPLIED HERE: Changed path to the debug APK ---
+          path: app/build/outputs/apk/debug/app-debug.apk
