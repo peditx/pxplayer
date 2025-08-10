@@ -8,4 +8,6 @@ object Constants {
     const val A2DP_SINK_PROFILE = 11
     // The integer value for BluetoothProfile.AVRCP_CONTROLLER. This is a hidden constant.
     const val AVRCP_CONTROLLER_PROFILE = 12
+    // --- NEW: The integer value for the PAN (Tethering) profile ---
+    const val PAN_PROFILE = 5
 }
