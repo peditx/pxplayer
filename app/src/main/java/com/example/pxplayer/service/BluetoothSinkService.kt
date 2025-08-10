@@ -64,7 +64,6 @@ class BluetoothSinkService : MediaSessionService() {
         initializeNotificationChannel()
         startForeground(Constants.NOTIFICATION_ID, createNotification("Waiting for connection..."))
 
-        // --- FIX: Set the device class to Car Audio to be recognized correctly ---
         setBluetoothClassAsCarStereo()
 
         initializeMediaSession()
@@ -73,12 +72,20 @@ class BluetoothSinkService : MediaSessionService() {
         initializeAudioAndEq()
     }
     
-    // --- NEW METHOD: Use reflection to set the Bluetooth Class of Device ---
     private fun setBluetoothClassAsCarStereo() {
         try {
+            // --- FIX APPLIED HERE: Use reflection to access the private constructor ---
+            // 1. Get the hidden constructor BluetoothClass(int)
+            val constructor = BluetoothClass::class.java.getDeclaredConstructor(Int::class.javaPrimitiveType)
+            // 2. Make it accessible
+            constructor.isAccessible = true
+            // 3. Create an instance with our desired class value (Car Stereo)
+            val carAudioClass = constructor.newInstance(0x200404)
+
+            // 4. Get the hidden method setBluetoothClass(BluetoothClass)
             val setClassMethod = bluetoothAdapter::class.java.getMethod("setBluetoothClass", BluetoothClass::class.java)
-            // This integer (0x200404) represents Service:Audio + Major:Audio/Video + Minor:Car Audio
-            val carAudioClass = BluetoothClass(0x200404) 
+            
+            // 5. Invoke the method with the created object
             val result = setClassMethod.invoke(bluetoothAdapter, carAudioClass) as Boolean
             if (result) {
                 Log.d("PxPlayerService", "Bluetooth class successfully set to Car Stereo.")
@@ -147,7 +154,6 @@ class BluetoothSinkService : MediaSessionService() {
             val action = intent.action
             Log.d("PxPlayerService", "Received action: $action")
             
-            // --- FIX: Use the correct hidden action string for A2DP Sink connection state ---
             if (action == "android.bluetooth.a2dpsink.profile.action.CONNECTION_STATE_CHANGED") {
                 val state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_DISCONNECTED)
                 val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
@@ -176,7 +182,6 @@ class BluetoothSinkService : MediaSessionService() {
     }
     
     private fun registerBroadcastReceivers() {
-        // --- FIX: Register for the specific A2DP Sink action ---
         val intentFilter = IntentFilter("android.bluetooth.a2dpsink.profile.action.CONNECTION_STATE_CHANGED")
         registerReceiver(broadcastReceiver, intentFilter)
     }
