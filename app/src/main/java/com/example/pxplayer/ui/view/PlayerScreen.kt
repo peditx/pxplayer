@@ -1,3 +1,4 @@
+// File: ui/view/PlayerScreen.kt
 package com.example.pxplayer.ui.view
 
 import androidx.compose.animation.Crossfade
@@ -16,6 +17,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -28,23 +30,15 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun PlayerScreen(viewModel: PlayerViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    val pairedDevices by viewModel.pairedDevices.collectAsState()
-    val discoveredDevices by viewModel.discoveredDevices.collectAsState()
-    val isScanning by viewModel.isScanning.collectAsState()
     
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showBottomSheet by remember { mutableStateOf(false) }
-
-    // این بخش فقط یک بار هنگام ساخته شدن صفحه اجرا می‌شود تا لیست دستگاه‌های جفت‌شده را بگیرد
-    LaunchedEffect(Unit) {
-        viewModel.fetchPairedDevices()
-    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        // با توجه به وضعیت اتصال، بین صفحه پلیر و صفحه لیست دستگاه‌ها جابجا می‌شود
+        // با توجه به وضعیت اتصال، بین صفحه پلیر و صفحه "در انتظار" جابجا می‌شود
         Crossfade(targetState = uiState.connectionStatus, label = "main-crossfade") { status ->
             when (status) {
                 ConnectionStatus.CONNECTED -> {
@@ -55,22 +49,7 @@ fun PlayerScreen(viewModel: PlayerViewModel) {
                     )
                 }
                 else -> { // DISCONNECTED or CONNECTING
-                    DeviceListScreen(
-                        pairedDevices = pairedDevices,
-                        discoveredDevices = discoveredDevices,
-                        onDeviceClick = { device ->
-                            if (device.bondState == android.bluetooth.BluetoothDevice.BOND_BONDED) {
-                                viewModel.connectToDevice(device) // اگر جفت شده، متصل شو
-                            } else {
-                                viewModel.pairDevice(device) // اگر نشده، ابتدا جفت شو
-                            }
-                        },
-                        isConnecting = status == ConnectionStatus.CONNECTING,
-                        isScanning = isScanning,
-                        onScanClicked = {
-                            if (isScanning) viewModel.cancelDiscovery() else viewModel.startDiscovery()
-                        }
-                    )
+                    WaitingForConnection(status = status)
                 }
             }
         }
@@ -137,6 +116,42 @@ fun PlayerContent(
     }
 }
 
+// این کامپوننت زمانی نمایش داده می‌شود که هیچ دستگاهی متصل نیست
+@Composable
+fun WaitingForConnection(status: ConnectionStatus) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            if (status == ConnectionStatus.CONNECTING) {
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Connecting...",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            } else {
+                Text(
+                    text = "Waiting for device to connect",
+                    style = MaterialTheme.typography.headlineSmall,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Make pxplayer discoverable in your phone's Bluetooth settings and connect from your other device.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp, start = 16.dp, end = 16.dp)
+                )
+            }
+        }
+    }
+}
+
+
 @Composable
 fun AlbumArt(albumArtUri: String?, modifier: Modifier = Modifier) {
     AsyncImage(model = albumArtUri, placeholder = painterResource(id = R.drawable.ic_album_placeholder), error = painterResource(id = R.drawable.ic_album_placeholder), contentDescription = "Album Art", contentScale = ContentScale.Crop, modifier = modifier.clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surfaceVariant))
@@ -187,3 +202,4 @@ private fun formatTime(millis: Long): String {
     return String.format("%02d:%02d", minutes, seconds)
 }
 
+// The DeviceListScreen.kt file is no longer needed and can be deleted.
