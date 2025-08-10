@@ -1,22 +1,22 @@
-# نام این ورک‌فلو.
-name: Android CI Build for pxplayer
+name: pxplayer Android CI
 
-# تعیین می‌کند که ورک‌فلو چه زمانی اجرا شود.
 on:
-  # در هر push به شاخه 'main' اجرا می‌شود.
   push:
     branches: [ "main" ]
-  # در هر pull request که به شاخه 'main' ارسال شود، اجرا می‌شود.
   pull_request:
     branches: [ "main" ]
 
-# وظایف (jobs) در این ورک‌فلو.
 jobs:
   build:
-    # این job روی آخرین نسخه اوبونتو اجرا می‌شود.
     runs-on: ubuntu-latest
 
-    # مراحل (steps) برای اجرای job 'build'.
+    defaults:
+      run:
+        # --- نکته مهم ۱ ---
+        # اگر پروژه اندروید شما در یک زیرپوشه قرار دارد، نام آن را اینجا وارد کنید.
+        # اگر در ریشه اصلی است، همین './' را باقی بگذارید.
+        working-directory: ./ # مثال: ./pxplayer
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,24 +26,18 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          # استفاده از کش برای افزایش سرعت بیلد.
           cache: gradle
-      
-      - name: List files for debugging
-        # این دستور تمام فایل‌های موجود در پوشه اصلی را لیست می‌کند.
-        run: ls -la
 
       - name: Grant execute permission for gradlew
-        # این مرحله احتمالاً خطا می‌دهد، چون gradlew پیدا نمی‌شود.
         run: chmod +x gradlew
 
       - name: Build with Gradle
-        # دستورات گریدل از ریشه پروژه اجرا می‌شوند.
         run: ./gradlew assembleRelease
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pxplayer-release
-          # مسیر فایل APK را به درستی مشخص می‌کند.
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          name: pxplayer-release-unsigned
+          # --- نکته مهم ۲ ---
+          # اگر در بالا working-directory را تغییر دادید، باید آن را به ابتدای این مسیر هم اضافه کنید.
+          path: app/build/outputs/apk/release/app-release-unsigned.apk # مثال: pxplayer/app/build/outputs/apk/release/app-release-unsigned.apk
