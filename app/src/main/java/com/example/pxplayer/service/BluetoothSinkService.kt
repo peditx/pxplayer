@@ -36,6 +36,8 @@ class BluetoothSinkService : MediaSessionService() {
     private lateinit var bluetoothAdapter: BluetoothAdapter
     private var a2dpSinkProfile: BluetoothProfile? = null
     private var avrcpControllerProfile: BluetoothProfile? = null
+    // --- NEW: Add a handle for the PAN (Tethering) profile ---
+    private var panProfile: BluetoothProfile? = null
     private var audioTrack: AudioTrack? = null
     private var equalizer: Equalizer? = null
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -79,21 +81,30 @@ class BluetoothSinkService : MediaSessionService() {
         }
     }
 
-    // --- NEW CRITICAL METHOD: Set A2DP Sink profile to the highest priority ---
-    private fun setProfilePriority(profile: BluetoothProfile) {
+    private fun setA2dpSinkPriority(profile: BluetoothProfile) {
         try {
-            // PRIORITY_ON = 100
-            val priorityOn = 100
-            // Use reflection to get the hidden setPriority method
+            val priorityOn = 100 // PRIORITY_ON
             val setPriorityMethod = profile::class.java.getMethod("setPriority", BluetoothDevice::class.java, Int::class.javaPrimitiveType)
-            
-            // Set high priority for all already paired devices
             for (device in bluetoothAdapter.bondedDevices) {
                 setPriorityMethod.invoke(profile, device, priorityOn)
-                Log.d("PxPlayerService", "Set A2DP Sink priority for ${device.name}")
             }
+            Log.d("PxPlayerService", "A2DP Sink profile priority set to ON.")
         } catch (e: Exception) {
-            Log.e("PxPlayerService", "Error setting profile priority via reflection", e)
+            Log.e("PxPlayerService", "Error setting A2DP Sink priority", e)
+        }
+    }
+
+    // --- NEW CRITICAL METHOD: Forcibly disable the PAN (Tethering) profile ---
+    private fun disablePanProfile(profile: BluetoothProfile) {
+        try {
+            val priorityOff = 0 // PRIORITY_OFF
+            val setPriorityMethod = profile::class.java.getMethod("setPriority", BluetoothDevice::class.java, Int::class.javaPrimitiveType)
+            for (device in bluetoothAdapter.bondedDevices) {
+                setPriorityMethod.invoke(profile, device, priorityOff)
+            }
+            Log.d("PxPlayerService", "PAN (Tethering) profile priority set to OFF.")
+        } catch (e: Exception) {
+            Log.e("PxPlayerService", "Error disabling PAN profile", e)
         }
     }
 
@@ -122,6 +133,8 @@ class BluetoothSinkService : MediaSessionService() {
     private fun connectToBluetoothProfiles() {
         bluetoothAdapter.getProfileProxy(applicationContext, profileListener, Constants.A2DP_SINK_PROFILE)
         bluetoothAdapter.getProfileProxy(applicationContext, profileListener, Constants.AVRCP_CONTROLLER_PROFILE)
+        // --- NEW: Also get the PAN profile so we can disable it ---
+        bluetoothAdapter.getProfileProxy(applicationContext, profileListener, Constants.PAN_PROFILE)
     }
 
     private val profileListener = object : BluetoothProfile.ServiceListener {
@@ -130,8 +143,7 @@ class BluetoothSinkService : MediaSessionService() {
                 Constants.A2DP_SINK_PROFILE -> {
                     a2dpSinkProfile = proxy
                     Log.d("PxPlayerService", "A2DP Sink Profile connected.")
-                    // --- CRITICAL STEP: Set the priority once the profile is available ---
-                    setProfilePriority(proxy)
+                    setA2dpSinkPriority(proxy)
                     
                     if (proxy.connectedDevices.isNotEmpty()) {
                         val device = proxy.connectedDevices.first()
@@ -144,12 +156,19 @@ class BluetoothSinkService : MediaSessionService() {
                     }
                 }
                 Constants.AVRCP_CONTROLLER_PROFILE -> avrcpControllerProfile = proxy
+                // --- NEW: When PAN profile is ready, disable it ---
+                Constants.PAN_PROFILE -> {
+                    panProfile = proxy
+                    Log.d("PxPlayerService", "PAN Profile connected.")
+                    disablePanProfile(proxy)
+                }
             }
         }
         override fun onServiceDisconnected(profile: Int) {
             when (profile) {
                 Constants.A2DP_SINK_PROFILE -> a2dpSinkProfile = null
                 Constants.AVRCP_CONTROLLER_PROFILE -> avrcpControllerProfile = null
+                Constants.PAN_PROFILE -> panProfile = null
             }
         }
     }
@@ -245,6 +264,7 @@ class BluetoothSinkService : MediaSessionService() {
         equalizer?.release()
         bluetoothAdapter.closeProfileProxy(Constants.A2DP_SINK_PROFILE, a2dpSinkProfile)
         bluetoothAdapter.closeProfileProxy(Constants.AVRCP_CONTROLLER_PROFILE, avrcpControllerProfile)
+        bluetoothAdapter.closeProfileProxy(Constants.PAN_PROFILE, panProfile)
     }
 
     private inner class MediaSessionCallback : MediaSession.Callback {}
