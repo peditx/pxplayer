@@ -20,7 +20,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -33,22 +32,36 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun PlayerScreen(viewModel: PlayerViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    val pairedDevices by viewModel.pairedDevices.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showBottomSheet by remember { mutableStateOf(false) }
+
+    // Fetch paired devices when the screen is first composed
+    LaunchedEffect(Unit) {
+        viewModel.fetchPairedDevices()
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        Crossfade(targetState = uiState.connectionStatus == ConnectionStatus.CONNECTED, label = "main-crossfade") { isConnected ->
-            if (isConnected) {
-                PlayerContent(
-                    uiState = uiState,
-                    viewModel = viewModel,
-                    onEqClick = { showBottomSheet = true }
-                )
-            } else {
-                WaitingForConnection(status = uiState.connectionStatus)
+        // --- FIX: Show device list when disconnected, player when connected ---
+        Crossfade(targetState = uiState.connectionStatus, label = "main-crossfade") { status ->
+            when (status) {
+                ConnectionStatus.CONNECTED -> {
+                    PlayerContent(
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        onEqClick = { showBottomSheet = true }
+                    )
+                }
+                else -> { // DISCONNECTED or CONNECTING
+                    DeviceListScreen(
+                        pairedDevices = pairedDevices,
+                        onDeviceClick = { device -> viewModel.connectToDevice(device) },
+                        isConnecting = status == ConnectionStatus.CONNECTING
+                    )
+                }
             }
         }
 
@@ -85,9 +98,7 @@ fun PlayerContent(
                 .fillMaxHeight()
                 .aspectRatio(1f)
         )
-
         Spacer(modifier = Modifier.width(32.dp))
-
         Column(
             modifier = Modifier.fillMaxHeight(),
             verticalArrangement = Arrangement.SpaceBetween
@@ -96,7 +107,6 @@ fun PlayerContent(
                 title = uiState.trackInfo.title,
                 artist = uiState.trackInfo.artist
             )
-
             Column {
                 SeekBarSection(
                     currentPosition = uiState.currentPosition,
@@ -115,41 +125,6 @@ fun PlayerContent(
         }
     }
 }
-
-@Composable
-fun WaitingForConnection(status: ConnectionStatus) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            if (status == ConnectionStatus.CONNECTING) {
-                CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Connecting...",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            } else {
-                Text(
-                    text = "Waiting for a device to connect",
-                    style = MaterialTheme.typography.headlineSmall,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Make sure pxplayer is discoverable in your phone's Bluetooth settings.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-        }
-    }
-}
-
 
 @Composable
 fun AlbumArt(albumArtUri: String?, modifier: Modifier = Modifier) {
