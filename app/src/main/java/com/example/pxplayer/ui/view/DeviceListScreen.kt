@@ -6,15 +6,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -22,49 +20,60 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun DeviceListScreen(
     pairedDevices: List<BluetoothDevice>,
+    discoveredDevices: List<BluetoothDevice>,
     onDeviceClick: (BluetoothDevice) -> Unit,
-    isConnecting: Boolean
+    isConnecting: Boolean,
+    isScanning: Boolean,
+    onScanClicked: () -> Unit
 ) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Bluetooth Devices",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Button(onClick = onScanClicked, enabled = !isConnecting) {
+                if (isScanning) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
+                } else {
+                    Text("Scan")
+                }
+            }
+        }
+
         if (isConnecting) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Connecting...",
-                    style = MaterialTheme.typography.titleLarge
-                )
             }
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "Select a Paired Device",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "Connect to a device to use it as an audio source.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
-                )
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                if (pairedDevices.isNotEmpty()) {
+                    item {
+                        Text("Paired Devices", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 8.dp))
+                    }
+                    items(pairedDevices) { device ->
+                        DeviceItem(device = device, isPaired = true, onClick = { onDeviceClick(device) })
+                        Divider()
+                    }
+                }
 
-                if (pairedDevices.isEmpty()) {
-                    Text("No paired devices found. Please pair a device in your phone's Bluetooth settings first.")
-                } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(pairedDevices) { device ->
-                            DeviceItem(device = device, onClick = { onDeviceClick(device) })
-                            Divider()
-                        }
+                val newDevices = discoveredDevices.filter { it.bondState != BluetoothDevice.BOND_BONDED }
+                if (newDevices.isNotEmpty()) {
+                    item {
+                        Text("Available Devices", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+                    }
+                    items(newDevices) { device ->
+                        DeviceItem(device = device, isPaired = false, onClick = { onDeviceClick(device) })
+                        Divider()
                     }
                 }
             }
@@ -74,15 +83,16 @@ fun DeviceListScreen(
 
 @SuppressLint("MissingPermission")
 @Composable
-fun DeviceItem(device: BluetoothDevice, onClick: () -> Unit) {
+fun DeviceItem(device: BluetoothDevice, isPaired: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 16.dp, horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(vertical = 12.dp, horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = device.name ?: "Unknown Device",
                 fontWeight = FontWeight.Bold,
@@ -92,6 +102,13 @@ fun DeviceItem(device: BluetoothDevice, onClick: () -> Unit) {
                 text = device.address,
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (isPaired) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = "Paired",
+                tint = MaterialTheme.colorScheme.primary
             )
         }
     }
