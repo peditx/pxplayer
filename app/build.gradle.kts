@@ -30,9 +30,8 @@ android {
             )
         }
         debug {
-            // --- FIX APPLIED HERE: Automatically add a unique suffix to the ID for each debug build ---
-            // This appends ".dev" and the current timestamp to the application ID
-            applicationIdSuffix = ".dev.${System.currentTimeMillis()}"
+            // --- FINAL FIX: Add a letter 't' before the timestamp to create a valid package name ---
+            applicationIdSuffix = ".dev.t${System.currentTimeMillis()}"
             isDebuggable = true
         }
     }
