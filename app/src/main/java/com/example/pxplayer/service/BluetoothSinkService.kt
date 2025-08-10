@@ -17,7 +17,6 @@ import android.os.Binder
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -33,7 +32,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-@SuppressLint("MissingPermission")
+@SuppressLint("MissingPermission", "SoonBlockedPrivateApi")
 class BluetoothSinkService : MediaSessionService() {
 
     private val binder = LocalBinder()
@@ -65,12 +64,32 @@ class BluetoothSinkService : MediaSessionService() {
         initializeNotificationChannel()
         startForeground(Constants.NOTIFICATION_ID, createNotification("Waiting for connection..."))
 
+        // --- FIX: Set the device class to Car Audio to be recognized correctly ---
+        setBluetoothClassAsCarStereo()
+
         initializeMediaSession()
         connectToBluetoothProfiles()
         registerBroadcastReceivers()
         initializeAudioAndEq()
     }
     
+    // --- NEW METHOD: Use reflection to set the Bluetooth Class of Device ---
+    private fun setBluetoothClassAsCarStereo() {
+        try {
+            val setClassMethod = bluetoothAdapter::class.java.getMethod("setBluetoothClass", BluetoothClass::class.java)
+            // This integer (0x200404) represents Service:Audio + Major:Audio/Video + Minor:Car Audio
+            val carAudioClass = BluetoothClass(0x200404) 
+            val result = setClassMethod.invoke(bluetoothAdapter, carAudioClass) as Boolean
+            if (result) {
+                Log.d("PxPlayerService", "Bluetooth class successfully set to Car Stereo.")
+            } else {
+                Log.e("PxPlayerService", "Failed to set Bluetooth class.")
+            }
+        } catch (e: Exception) {
+            Log.e("PxPlayerService", "Error setting Bluetooth class via reflection", e)
+        }
+    }
+
     private fun initializeMediaSession() {
         val player = androidx.media3.exoplayer.ExoPlayer.Builder(this).build()
         mediaSession = MediaSession.Builder(this, player)
@@ -126,20 +145,38 @@ class BluetoothSinkService : MediaSessionService() {
     private val broadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action
-            val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+            Log.d("PxPlayerService", "Received action: $action")
             
+            // --- FIX: Use the correct hidden action string for A2DP Sink connection state ---
             if (action == "android.bluetooth.a2dpsink.profile.action.CONNECTION_STATE_CHANGED") {
                 val state = intent.getIntExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_DISCONNECTED)
+                val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                Log.d("PxPlayerService", "A2DP Sink state changed to: $state for device ${device?.name}")
+
                 when (state) {
                     BluetoothProfile.STATE_CONNECTING -> _playerState.update { it.copy(connectionStatus = ConnectionStatus.CONNECTING) }
-                    BluetoothProfile.STATE_CONNECTED -> _playerState.update { it.copy(connectionStatus = ConnectionStatus.CONNECTED) }
-                    BluetoothProfile.STATE_DISCONNECTED -> _playerState.update { it.copy(connectionStatus = ConnectionStatus.DISCONNECTED, isPlaying = false, trackInfo = TrackInfo()) }
+                    BluetoothProfile.STATE_CONNECTED -> {
+                        _playerState.update {
+                            it.copy(
+                                connectionStatus = ConnectionStatus.CONNECTED,
+                                trackInfo = it.trackInfo.copy(artist = device?.name ?: "Connected Device")
+                            )
+                        }
+                    }
+                    BluetoothProfile.STATE_DISCONNECTED -> _playerState.update {
+                        it.copy(
+                            connectionStatus = ConnectionStatus.DISCONNECTED,
+                            isPlaying = false,
+                            trackInfo = TrackInfo()
+                        )
+                    }
                 }
             }
         }
     }
     
     private fun registerBroadcastReceivers() {
+        // --- FIX: Register for the specific A2DP Sink action ---
         val intentFilter = IntentFilter("android.bluetooth.a2dpsink.profile.action.CONNECTION_STATE_CHANGED")
         registerReceiver(broadcastReceiver, intentFilter)
     }
