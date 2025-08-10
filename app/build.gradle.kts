@@ -8,6 +8,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
+        // --- The base application ID ---
         applicationId = "com.example.pxplayer"
         minSdk = 28
         targetSdk = 34
@@ -27,6 +28,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            // --- FIX APPLIED HERE: Automatically add a unique suffix to the ID for each debug build ---
+            // This appends ".dev" and the current timestamp to the application ID
+            applicationIdSuffix = ".dev.${System.currentTimeMillis()}"
+            isDebuggable = true
         }
     }
     compileOptions {
@@ -62,8 +69,6 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0")
-
-    // --- FIX APPLIED HERE: Explicitly add the material icons dependency ---
     implementation("androidx.compose.material:material-icons-extended-android:1.6.7")
 
     // Media3 for MediaSession
