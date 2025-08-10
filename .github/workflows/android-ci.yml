@@ -1,4 +1,4 @@
-name: Android CI Build for pxplayer
+name: pxplayer Android CI
 
 on:
   push:
@@ -9,6 +9,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        # --- نکته مهم ۱ ---
+        # اگر پروژه اندروید شما در یک زیرپوشه قرار دارد، نام آن را اینجا وارد کنید.
+        # اگر در ریشه اصلی است، همین './' را باقی بگذارید.
+        working-directory: ./ # مثال: ./pxplayer
 
     steps:
       - name: Checkout code
@@ -30,5 +37,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pxplayer-release
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          name: pxplayer-release-unsigned
+          # --- نکته مهم ۲ ---
+          # اگر در بالا working-directory را تغییر دادید، باید آن را به ابتدای این مسیر هم اضافه کنید.
+          path: app/build/outputs/apk/release/app-release-unsigned.apk # مثال: pxplayer/app/build/outputs/apk/release/app-release-unsigned.apk
