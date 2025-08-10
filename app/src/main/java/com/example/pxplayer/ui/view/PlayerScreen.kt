@@ -6,11 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Equalizer
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,10 +29,13 @@ import java.util.concurrent.TimeUnit
 fun PlayerScreen(viewModel: PlayerViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val pairedDevices by viewModel.pairedDevices.collectAsState()
+    val discoveredDevices by viewModel.discoveredDevices.collectAsState()
+    val isScanning by viewModel.isScanning.collectAsState()
+    
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showBottomSheet by remember { mutableStateOf(false) }
 
-    // Fetch paired devices when the screen is first composed
+    // این بخش فقط یک بار هنگام ساخته شدن صفحه اجرا می‌شود تا لیست دستگاه‌های جفت‌شده را بگیرد
     LaunchedEffect(Unit) {
         viewModel.fetchPairedDevices()
     }
@@ -45,7 +44,7 @@ fun PlayerScreen(viewModel: PlayerViewModel) {
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
     ) {
-        // --- FIX: Show device list when disconnected, player when connected ---
+        // با توجه به وضعیت اتصال، بین صفحه پلیر و صفحه لیست دستگاه‌ها جابجا می‌شود
         Crossfade(targetState = uiState.connectionStatus, label = "main-crossfade") { status ->
             when (status) {
                 ConnectionStatus.CONNECTED -> {
@@ -58,13 +57,25 @@ fun PlayerScreen(viewModel: PlayerViewModel) {
                 else -> { // DISCONNECTED or CONNECTING
                     DeviceListScreen(
                         pairedDevices = pairedDevices,
-                        onDeviceClick = { device -> viewModel.connectToDevice(device) },
-                        isConnecting = status == ConnectionStatus.CONNECTING
+                        discoveredDevices = discoveredDevices,
+                        onDeviceClick = { device ->
+                            if (device.bondState == android.bluetooth.BluetoothDevice.BOND_BONDED) {
+                                viewModel.connectToDevice(device) // اگر جفت شده، متصل شو
+                            } else {
+                                viewModel.pairDevice(device) // اگر نشده، ابتدا جفت شو
+                            }
+                        },
+                        isConnecting = status == ConnectionStatus.CONNECTING,
+                        isScanning = isScanning,
+                        onScanClicked = {
+                            if (isScanning) viewModel.cancelDiscovery() else viewModel.startDiscovery()
+                        }
                     )
                 }
             }
         }
 
+        // اگر دکمه اکولایزر زده شود، این صفحه از پایین باز می‌شود
         if (showBottomSheet) {
             ModalBottomSheet(
                 onDismissRequest = { showBottomSheet = false },
@@ -128,109 +139,51 @@ fun PlayerContent(
 
 @Composable
 fun AlbumArt(albumArtUri: String?, modifier: Modifier = Modifier) {
-    AsyncImage(
-        model = albumArtUri,
-        placeholder = painterResource(id = R.drawable.ic_album_placeholder),
-        error = painterResource(id = R.drawable.ic_album_placeholder),
-        contentDescription = "Album Art",
-        contentScale = ContentScale.Crop,
-        modifier = modifier
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-    )
+    AsyncImage(model = albumArtUri, placeholder = painterResource(id = R.drawable.ic_album_placeholder), error = painterResource(id = R.drawable.ic_album_placeholder), contentDescription = "Album Art", contentScale = ContentScale.Crop, modifier = modifier.clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surfaceVariant))
 }
-
 @Composable
 fun TrackDetails(title: String, artist: String) {
     Column {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Text(text = title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = artist,
-            style = MaterialTheme.typography.titleLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Text(text = artist, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
-
 @Composable
 fun SeekBarSection(currentPosition: Long, totalDuration: Long, onSeek: (Float) -> Unit) {
     Column {
-        Slider(
-            value = currentPosition.toFloat(),
-            onValueChange = onSeek,
-            valueRange = 0f..totalDuration.toFloat().coerceAtLeast(0f),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        Slider(value = currentPosition.toFloat(), onValueChange = onSeek, valueRange = 0f..totalDuration.toFloat().coerceAtLeast(0f), modifier = Modifier.fillMaxWidth())
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(text = formatTime(currentPosition), style = MaterialTheme.typography.labelMedium)
             Text(text = formatTime(totalDuration), style = MaterialTheme.typography.labelMedium)
         }
     }
 }
-
 @Composable
-fun PlayerControls(
-    isPlaying: Boolean,
-    onPlayPauseClick: () -> Unit,
-    onNextClick: () -> Unit,
-    onPreviousClick: () -> Unit,
-    onEqClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+fun PlayerControls(isPlaying: Boolean, onPlayPauseClick: () -> Unit, onNextClick: () -> Unit, onPreviousClick: () -> Unit, onEqClick: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
         PlayerButton(icon = Icons.Default.SkipPrevious, onClick = onPreviousClick)
-        LargePlayerButton(
-            icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-            onClick = onPlayPauseClick
-        )
+        LargePlayerButton(icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, onClick = onPlayPauseClick)
         PlayerButton(icon = Icons.Default.SkipNext, onClick = onNextClick)
         PlayerButton(icon = Icons.Default.Equalizer, onClick = onEqClick)
     }
 }
-
 @Composable
 fun PlayerButton(icon: ImageVector, onClick: () -> Unit) {
     IconButton(onClick = onClick, modifier = Modifier.size(72.dp)) {
         Icon(imageVector = icon, contentDescription = null, modifier = Modifier.fillMaxSize(0.6f))
     }
 }
-
 @Composable
 fun LargePlayerButton(icon: ImageVector, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.size(88.dp),
-        shape = CircleShape,
-        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = "Play/Pause",
-            modifier = Modifier.fillMaxSize(0.7f),
-            tint = MaterialTheme.colorScheme.onPrimary
-        )
+    Button(onClick = onClick, modifier = Modifier.size(88.dp), shape = CircleShape, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)) {
+        Icon(imageVector = icon, contentDescription = "Play/Pause", modifier = Modifier.fillMaxSize(0.7f), tint = MaterialTheme.colorScheme.onPrimary)
     }
 }
-
 private fun formatTime(millis: Long): String {
     if (millis < 0) return "00:00"
     val minutes = TimeUnit.MILLISECONDS.toMinutes(millis)
     val seconds = TimeUnit.MILLISECONDS.toSeconds(millis) - TimeUnit.MINUTES.toSeconds(minutes)
     return String.format("%02d:%02d", minutes, seconds)
 }
+
