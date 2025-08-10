@@ -48,6 +48,10 @@ class BluetoothSinkService : MediaSessionService() {
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState = _playerState.asStateFlow()
 
+    // --- NEW: Flow for paired devices list ---
+    private val _pairedDevicesList = MutableStateFlow<List<BluetoothDevice>>(emptyList())
+    val pairedDevicesList = _pairedDevicesList.asStateFlow()
+
     inner class LocalBinder : Binder() {
         fun getService(): BluetoothSinkService = this@BluetoothSinkService
     }
@@ -65,8 +69,6 @@ class BluetoothSinkService : MediaSessionService() {
         startForeground(Constants.NOTIFICATION_ID, createNotification("Waiting for connection..."))
 
         setBluetoothClassAsCarStereo()
-        
-        // --- FINAL FIX: Make the device discoverable as a car stereo ---
         makeDiscoverable()
 
         initializeMediaSession()
@@ -92,13 +94,11 @@ class BluetoothSinkService : MediaSessionService() {
         }
     }
     
-    // --- NEW METHOD: Make the device discoverable to other devices ---
     private fun makeDiscoverable() {
         try {
-            // This hidden constant means SCAN_MODE_CONNECTABLE_DISCOVERABLE
             val scanModeDiscoverable = 23 
             val setScanModeMethod = bluetoothAdapter::class.java.getMethod("setScanMode", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
-            val result = setScanModeMethod.invoke(bluetoothAdapter, scanModeDiscoverable, 300) as Boolean // Discoverable for 300 seconds (5 minutes)
+            val result = setScanModeMethod.invoke(bluetoothAdapter, scanModeDiscoverable, 300) as Boolean
             if (result) {
                 Log.d("PxPlayerService", "Device set to discoverable.")
             } else {
@@ -106,6 +106,28 @@ class BluetoothSinkService : MediaSessionService() {
             }
         } catch (e: Exception) {
             Log.e("PxPlayerService", "Error setting discoverable mode via reflection", e)
+        }
+    }
+
+    // --- NEW: Public methods to be called from ViewModel ---
+    fun fetchPairedDevices() {
+        _pairedDevicesList.value = bluetoothAdapter.bondedDevices.toList()
+    }
+
+    fun connect(device: BluetoothDevice) {
+        Log.d("PxPlayerService", "Attempting to connect to ${device.name}")
+        _playerState.update { it.copy(connectionStatus = ConnectionStatus.CONNECTING) }
+        try {
+            // Use reflection to call the hidden connect method on the A2DP Sink profile
+            val connectMethod = a2dpSinkProfile!!::class.java.getMethod("connect", BluetoothDevice::class.java)
+            val result = connectMethod.invoke(a2dpSinkProfile, device) as Boolean
+            if (!result) {
+                Log.e("PxPlayerService", "Connect method returned false.")
+                _playerState.update { it.copy(connectionStatus = ConnectionStatus.DISCONNECTED) }
+            }
+        } catch (e: Exception) {
+            Log.e("PxPlayerService", "Error connecting via reflection", e)
+            _playerState.update { it.copy(connectionStatus = ConnectionStatus.DISCONNECTED) }
         }
     }
 
