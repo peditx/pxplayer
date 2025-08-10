@@ -65,6 +65,9 @@ class BluetoothSinkService : MediaSessionService() {
         startForeground(Constants.NOTIFICATION_ID, createNotification("Waiting for connection..."))
 
         setBluetoothClassAsCarStereo()
+        
+        // --- FINAL FIX: Make the device discoverable as a car stereo ---
+        makeDiscoverable()
 
         initializeMediaSession()
         connectToBluetoothProfiles()
@@ -86,6 +89,23 @@ class BluetoothSinkService : MediaSessionService() {
             }
         } catch (e: Exception) {
             Log.e("PxPlayerService", "Error setting Bluetooth class via reflection", e)
+        }
+    }
+    
+    // --- NEW METHOD: Make the device discoverable to other devices ---
+    private fun makeDiscoverable() {
+        try {
+            // This hidden constant means SCAN_MODE_CONNECTABLE_DISCOVERABLE
+            val scanModeDiscoverable = 23 
+            val setScanModeMethod = bluetoothAdapter::class.java.getMethod("setScanMode", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+            val result = setScanModeMethod.invoke(bluetoothAdapter, scanModeDiscoverable, 300) as Boolean // Discoverable for 300 seconds (5 minutes)
+            if (result) {
+                Log.d("PxPlayerService", "Device set to discoverable.")
+            } else {
+                Log.e("PxPlayerService", "Failed to set discoverable mode.")
+            }
+        } catch (e: Exception) {
+            Log.e("PxPlayerService", "Error setting discoverable mode via reflection", e)
         }
     }
 
@@ -126,7 +146,6 @@ class BluetoothSinkService : MediaSessionService() {
                 Constants.A2DP_SINK_PROFILE -> {
                     a2dpSinkProfile = proxy
                     Log.d("PxPlayerService", "A2DP Sink Profile connected.")
-                    // --- FIX: Proactively check for already connected devices ---
                     if (proxy.connectedDevices.isNotEmpty()) {
                         val device = proxy.connectedDevices.first()
                         Log.d("PxPlayerService", "Found already connected device: ${device.name}")
