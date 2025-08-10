@@ -47,7 +47,6 @@ class BluetoothSinkService : MediaSessionService() {
     private val _pairedDevicesList = MutableStateFlow<List<BluetoothDevice>>(emptyList())
     val pairedDevicesList = _pairedDevicesList.asStateFlow()
     
-    // --- NEW: Flow for discovered devices and scanning state ---
     private val _discoveredDevicesList = MutableStateFlow<List<BluetoothDevice>>(emptyList())
     val discoveredDevicesList = _discoveredDevicesList.asStateFlow()
     private val _isScanning = MutableStateFlow(false)
@@ -100,7 +99,6 @@ class BluetoothSinkService : MediaSessionService() {
         }
     }
 
-    // --- NEW: Active Discovery and Pairing Logic ---
     fun startDiscovery() {
         if (bluetoothAdapter.isDiscovering) {
             bluetoothAdapter.cancelDiscovery()
@@ -244,7 +242,6 @@ class BluetoothSinkService : MediaSessionService() {
     }
 
     private fun initializeAudioAndEq() {
-        // This part remains the same
         val sampleRate = 44100
         val bufferSize = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT)
         audioTrack = AudioTrack.Builder()
