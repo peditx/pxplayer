@@ -22,9 +22,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _uiState = MutableStateFlow(PlayerState())
     val uiState = _uiState.asStateFlow()
 
-    // --- NEW: State for the list of paired devices ---
     private val _pairedDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
     val pairedDevices = _pairedDevices.asStateFlow()
+
+    // --- NEW: StateFlow for discovered devices and scanning status ---
+    private val _discoveredDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
+    val discoveredDevices = _discoveredDevices.asStateFlow()
+    private val _isScanning = MutableStateFlow(false)
+    val isScanning = _isScanning.asStateFlow()
 
     private var service: BluetoothSinkService? = null
     private var isBound = false
@@ -35,9 +40,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             service = serviceBinder.getService()
             isBound = true
             observeServiceState()
-            observePairedDevices()
+            observeDeviceLists()
         }
-
         override fun onServiceDisconnected(name: ComponentName?) {
             isBound = false
             service = null
@@ -58,19 +62,30 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     
-    // --- NEW: Observe the device list from the service ---
-    private fun observePairedDevices() {
+    private fun observeDeviceLists() {
         viewModelScope.launch {
             service?.pairedDevicesList?.collect { devices ->
                 _pairedDevices.value = devices
             }
         }
+        viewModelScope.launch {
+            service?.discoveredDevicesList?.collect { devices ->
+                _discoveredDevices.value = devices
+            }
+        }
+        viewModelScope.launch {
+            service?.isScanning?.collect { scanning ->
+                _isScanning.value = scanning
+            }
+        }
     }
     
-    // --- NEW: Methods to interact with the new feature ---
+    // --- NEW: Methods to control discovery and pairing ---
     fun fetchPairedDevices() = service?.fetchPairedDevices()
+    fun startDiscovery() = service?.startDiscovery()
+    fun cancelDiscovery() = service?.cancelDiscovery()
+    fun pairDevice(device: BluetoothDevice) = service?.createBond(device)
     fun connectToDevice(device: BluetoothDevice) = service?.connect(device)
-
 
     // --- UI Event Handlers ---
     fun onPlayPauseClick() = service?.togglePlayPause()
